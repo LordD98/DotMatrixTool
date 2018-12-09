@@ -22,8 +22,8 @@ namespace DotMatrixTool.Commands
             window.CommandBindings.Add(new CommandBinding(Load, Load_Executed, Item_Selected));
             window.CommandBindings.Add(new CommandBinding(New, New_Executed));
             window.CommandBindings.Add(new CommandBinding(Delete, Delete_Executed, Item_Selected));
-            // Add Convert?
-        }
+			window.CommandBindings.Add(new CommandBinding(ClearAll, ClearAll_Executed, Item_Present));
+		}
 
         private static void Item_Selected(object sender, CanExecuteRoutedEventArgs e)
         {
@@ -36,10 +36,17 @@ namespace DotMatrixTool.Commands
             e.CanExecute = false;
         }
 
-        //private static void New_CanExecute(object sender, CanExecuteRoutedEventArgs e)
-        //{
-        //    e.CanExecute = true;
-        //}
+        private static void Item_Present(object sender, CanExecuteRoutedEventArgs e)
+		{
+			MainWindow mainWindow = Context as MainWindow;
+			if(mainWindow != null)
+			{
+				e.CanExecute = (mainWindow.lbxSavedPatterns.ItemsSource as ObservableCollection<DotMatrixSetting>).Count != -1;
+				return;
+			}
+			e.CanExecute = false;
+		}
+
 
         private static void New_Executed(object sender, ExecutedRoutedEventArgs e)
         {
@@ -106,6 +113,27 @@ namespace DotMatrixTool.Commands
             }
         }
 
+		private static void ClearAll_Executed(object sender, ExecutedRoutedEventArgs e)
+		{
+			MessageBoxResult result = MessageBox.Show
+			(
+				"Alle gespeicherten Matrizen löschen?",
+				"Alles löschen?",
+				MessageBoxButton.YesNo,
+				MessageBoxImage.Warning,
+				MessageBoxResult.No
+			);
+			if(result == MessageBoxResult.Yes)
+			{
+				MainWindow mainWindow = Context as MainWindow;
+				if(mainWindow != null)
+				{
+					(mainWindow.lbxSavedPatterns.ItemsSource as ObservableCollection<DotMatrixSetting>).Clear();
+					mainWindow.BtnClear_Click(null, null);
+				}
+			}
+		}
+
         public static readonly RoutedUICommand New = new RoutedUICommand
             (
                 "New",
@@ -150,16 +178,15 @@ namespace DotMatrixTool.Commands
                 }
             );
 
-        // Not sure if better implemented in MainWindow
-        //public static readonly RoutedUICommand Convert = new RoutedUICommand
-        //    (
-        //        "Convert",
-        //        "Convert",
-        //        typeof(SettingCommands),
-        //        new InputGestureCollection()
-        //        {
-        //            new KeyGesture(Key.Enter, ModifierKeys.Control)
-        //        }
-        //    );
-    }
+		public static readonly RoutedUICommand ClearAll = new RoutedUICommand
+			(
+				"Clear All",
+				"ClearAll",
+				typeof(SettingCommands),
+				new InputGestureCollection()
+				{
+					new KeyGesture(Key.X, ModifierKeys.Alt)
+				}
+			);
+	}
 }
