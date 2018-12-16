@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -19,14 +20,16 @@ namespace DotMatrixTool
 	public partial class MainWindow
 	{
 
-		enum ConversionType
+		public enum ConversionType
 		{
 			MatrixIn,
 			MatrixOut,
 			CodesIn,
-			CodesOut
+			CodesOut,
+			SettingsIn,
+			SettingsOut
 		}
-		MainWindow.ConversionType conversionType = MainWindow.ConversionType.CodesIn;
+		public ConversionType conversionType = ConversionType.CodesIn;
 
 		enum ClickType
 		{
@@ -34,7 +37,7 @@ namespace DotMatrixTool
 			Red,
 			White,
 		}
-		MainWindow.ClickType currentClick = MainWindow.ClickType.None;
+		ClickType currentClick = ClickType.None;
 
 		struct ClickPosition
 		{
@@ -53,6 +56,8 @@ namespace DotMatrixTool
 		public bool noImport = false;
 		public bool flipDimensions = false;
 		public bool trim = false;
+		public bool overwriteSettings = true;
+		public bool exportDimensions = true;
 
 		const int canvasSideMargin = 14;
 		const double u = 11.13;
@@ -70,29 +75,18 @@ namespace DotMatrixTool
 			buttons = new List<List<Ellipse>>(height);
 			dotMatrix = new List<List<bool>>(height);
 
+
 			InitializeList(buttons, width, height);
 			InitializeList(dotMatrix, width, height);
 			InitializeComponent();
+			//SplitterWidthConverter.window = this;
 
 			listBoxItems = new ObservableCollection<DotMatrixSetting>();
-			lbxSavedPatterns.ItemsSource = listBoxItems;
-			SettingCommands.Context = this;
+			(testControl.Content as ListBox).ItemsSource = listBoxItems;
 
 			Loaded += new RoutedEventHandler(MainWindow_Loaded);
 			Loaded += (x, y) => Keyboard.Focus(canvas);
-
-			(testControl.Content as ListBox).ItemsSource = listBoxItems;
-
-			//DispatcherTimer timer = new DispatcherTimer();
-			//timer.Tick += timer_tick;
-			//timer.Interval = TimeSpan.FromMilliseconds(10);
-			//timer.Start();
 		}
-
-		//private void timer_tick(object sender, EventArgs e)
-		//{
-		//	tbxCode.Text = Keyboard.FocusedElement?.ToString();
-		//}
 
 		private void RedrawGrid()
 		{
@@ -146,7 +140,7 @@ namespace DotMatrixTool
 
 		private void MainWindow_Loaded(object sender, RoutedEventArgs e)
 		{
-			SettingCommands.BindCommandsToWindow(this);
+			SettingCommands.BindCommandsToWindow(this, testControl);
 		}
 
 		private void DrawInit(object sender, RoutedEventArgs e)
@@ -174,164 +168,277 @@ namespace DotMatrixTool
 			RedrawGrid();
 		}
 
-		private void Convert(object sender, RoutedEventArgs e)
+		public void Convert(object sender, RoutedEventArgs e)
 		{
-			switch(conversionType)
+			try
 			{
-				case ConversionType.MatrixIn:
+				switch(conversionType)
 				{
-					int oldCount = listBoxItems.Count;
-					string[] textLines = tbxCode.Text.Split(new char[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-					int newHeight = -1;
-					for(int row = 0; row < textLines.Length; row++)
+					case ConversionType.MatrixIn:
 					{
-						textLines[row] = textLines[row].Replace("\r", "").Replace(" ", "");
-						if(newHeight == -1 && textLines[row] == "")
+						int oldCount = listBoxItems.Count;
+						string[] textLines = tbxCode.Text.Split(new char[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+						int newHeight = -1;
+						for(int row = 0; row < textLines.Length; row++)
 						{
-							newHeight = row;
+							textLines[row] = textLines[row].Replace("\r", "").Replace(" ", "");
+							if(newHeight == -1 && textLines[row] == "")
+							{
+								newHeight = row;
+							}
 						}
+						int numChunks = textLines.Count(x => x == "") + 1;
+						int newWidth = textLines[0].Length;
+						byte[][] byteData = new byte[numChunks][];
+						for(int chunk = 0; chunk < numChunks; ++chunk)
+						{
+							byteData[chunk] = new byte[newHeight];
+							for(int i = 0; i < newHeight; ++i)
+							{
+								byteData[chunk][i] = System.Convert.ToByte(textLines[chunk * (newHeight + 1) + i], 2);
+							}
+							DotMatrixSetting newSetting = new DotMatrixSetting($"#{chunk}", newWidth, newHeight);
+							newSetting.SetMatrix(byteData[chunk]);
+							if(!noImport)
+							{
+								listBoxItems.Add(newSetting);
+							}
+							if(trim)
+							{
+								newSetting.TrimMatrix();
+							}
+						}
+						if(listBoxItems.Count > oldCount && loadImmediately)
+						{
+							(testControl.Content as ListBox).SelectedIndex = oldCount;
+							SettingCommands.Load.Execute(null, null);
+						}
+						break;
 					}
-					int numChunks = textLines.Count(x => x == "") + 1;
-					int newWidth = textLines[0].Length;
-					byte[][] byteData = new byte[numChunks][];
-					for(int chunk = 0; chunk < numChunks; ++chunk)
+					case ConversionType.MatrixOut:
 					{
-						byteData[chunk] = new byte[newHeight];
-						for(int i = 0; i < newHeight; ++i)
+						string code = "";
+						for(int i = 0; i < this.height; i++)
 						{
-							byteData[chunk][i] = System.Convert.ToByte(textLines[chunk * (newHeight + 1) + i], 2);
+							for(int j = 0; j < this.width; j++)
+							{
+								code += (dotMatrix[i][j] ? "1" : "0") + " ";
+							}
+							code += "\n";
 						}
-						DotMatrixSetting newSetting = new DotMatrixSetting($"#{chunk}", newWidth, newHeight);
-						newSetting.SetMatrix(byteData[chunk]);
-						if(!noImport)
-						{
-							listBoxItems.Add(newSetting);
-						}
-						if(trim)
-						{
-							newSetting.TrimMatrix();
-						}
+						tbxCode.Text = code;
+						break;
 					}
-					if(listBoxItems.Count > oldCount && loadImmediately)
+					case ConversionType.CodesIn:
 					{
-						lbxSavedPatterns.SelectedIndex = oldCount;
-						SettingCommands.Load.Execute(null, null);
-					}
-					break;
-				}
-				case ConversionType.MatrixOut:
-				{
-					string code = "";
-					for(int i = 0; i < this.height; i++)
-					{
-						for(int j = 0; j < this.width; j++)
+						if(overwriteSettings)
 						{
-							code += (dotMatrix[i][j] ? "1" : "0") + " ";
+							listBoxItems.Clear();
 						}
-						code += "\n";
-					}
-					tbxCode.Text = code;
-					break;
-				}
-				case ConversionType.CodesIn:
-				{
-					string[] strCodes = tbxCode.Text.Replace("\r", "").Replace(" ", "").Replace("0x", "").Split(new char[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-					int oldNumSettings = listBoxItems.Count;
-					int newNumSettings = strCodes.Length;
-					DotMatrixSetting firstSetting = null;
-					for(int k = 0; k < strCodes.Length; k++)
-					{
-						int newHeight;
-						int newWidth;
-						if(strCodes[k].Count(x => (x == ',')) <= 1)
+						string[] strCodes = tbxCode.Text.Replace("\r", "").Replace(" ", "").Replace("0x", "").Split(new char[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+						int oldNumSettings = listBoxItems.Count;
+						int newNumSettings = strCodes.Length;
+						DotMatrixSetting firstSetting = null;
+						for(int k = 0; k < strCodes.Length; k++)
 						{
-							newWidth = 8;
-						}
-						else
-						{
-							newWidth = strCodes[k].IndexOf(',') * 4;
-						}
-						strCodes[k] = strCodes[k].Replace(",", "");
-						newHeight = strCodes[k].Length / (newWidth / 4);
-						UInt64 mask = UInt64.MaxValue;
-						mask = mask >> (64 - newWidth);
+							int newHeight;
+							int newWidth;
+							if(strCodes[k].Count(x => (x == ',')) <= 1)
+							{
+								newWidth = 8;
+							}
+							else
+							{
+								newWidth = strCodes[k].IndexOf(',') * 4;
+							}
+							strCodes[k] = strCodes[k].Replace(",", "");
+							newHeight = strCodes[k].Length / (newWidth / 4);
+							UInt64 mask = UInt64.MaxValue;
+							mask = mask >> (64 - newWidth);
 
-						string[] matrixLines = new string[newHeight];
-						UInt64[] splitMatrix = new UInt64[newHeight];
-						DotMatrixSetting newSetting = new DotMatrixSetting($"#{k + oldNumSettings}", newWidth, newHeight);
-						for(int i = newHeight; i != 0; i--)
-						{
-							matrixLines[i - 1] = strCodes[k].Substring(strCodes[k].Length - 2);
-							splitMatrix[i - 1] = System.Convert.ToUInt64(matrixLines[i - 1], 16);
-							strCodes[k] = strCodes[k].Remove(strCodes[k].Length - 2);
-						}
-						if(flipDimensions)
-						{
-							for(int i = 0; i < newHeight; i++)
+							string[] matrixLines = new string[newHeight];
+							UInt64[] splitMatrix = new UInt64[newHeight];
+							DotMatrixSetting newSetting = new DotMatrixSetting($"#{k + oldNumSettings}", newWidth, newHeight);
+							for(int i = newHeight; i != 0; i--)
 							{
-								for(int j = 0; j < newWidth; j++)
+								matrixLines[i - 1] = strCodes[k].Substring(strCodes[k].Length - 2);
+								splitMatrix[i - 1] = System.Convert.ToUInt64(matrixLines[i - 1], 16);
+								strCodes[k] = strCodes[k].Remove(strCodes[k].Length - 2);
+							}
+							if(flipDimensions)
+							{
+								for(int i = 0; i < newHeight; i++)
 								{
-									newSetting[i, j] = (splitMatrix[newHeight - i - 1] & (1UL << (j))) != 0;
+									for(int j = 0; j < newWidth; j++)
+									{
+										newSetting[i, j] = (splitMatrix[newHeight - i - 1] & (1UL << (j))) != 0;
+									}
 								}
 							}
-						}
-						else
-						{
-							for(int i = 0; i < newHeight; i++)
+							else
 							{
-								for(int j = 0; j < newWidth; j++)
+								for(int i = 0; i < newHeight; i++)
 								{
-									newSetting[i, j] = (splitMatrix[i] & (1UL << (newWidth - j - 1))) != 0;
+									for(int j = 0; j < newWidth; j++)
+									{
+										newSetting[i, j] = (splitMatrix[i] & (1UL << (newWidth - j - 1))) != 0;
+									}
 								}
 							}
+							if(!noImport)
+							{
+								listBoxItems.Add(newSetting);
+							}
+							if(trim)
+							{
+								newSetting.TrimMatrix();
+							}
+							if(k == 0)
+							{
+								firstSetting = newSetting;
+							}
 						}
-						if(!noImport)
+						if(loadImmediately && firstSetting != null)
 						{
-							listBoxItems.Add(newSetting);
+							LoadDotMatrixFromSetting(firstSetting);
+							if(listBoxItems.Count > oldNumSettings)
+							{
+								(testControl.Content as ListBox).SelectedIndex = oldNumSettings;
+							}
 						}
-						if(trim)
-						{
-							newSetting.TrimMatrix();
-						}
-						if(k == 0)
-						{
-							firstSetting = newSetting;
-						}
+						break;
 					}
-					if(loadImmediately && firstSetting != null)
+					case ConversionType.CodesOut:
 					{
-						LoadDotMatrixFromSetting(firstSetting);
-						if(listBoxItems.Count > oldNumSettings)
+						string code = "";
+						foreach(DotMatrixSetting setting in listBoxItems)
 						{
-							lbxSavedPatterns.SelectedIndex = oldNumSettings;
-						}
-					}
-					break;
-				}
-				case ConversionType.CodesOut:
-				{
-					string code = "";
-					foreach(DotMatrixSetting setting in listBoxItems)
-					{
-						for(int i = 0; i < setting.Height; i++)
-						{
-							UInt32 num = 0;
-							for(int j = 0; j < setting.Width; j++)
+							for(int i = 0; i < setting.Height; i++)
 							{
-								if(setting[i, j])
+								UInt32 num = 0;
+								for(int j = 0; j < setting.Width; j++)
 								{
-									num |= (1U << (byte)(setting.Width - 1 - j));
+									if(setting[i, j])
+									{
+										num |= (1U << (byte)(setting.Width - 1 - j));
+									}
+								}
+								code += num.ToString("X2");
+								//code += num.ToString("X2") + ",";
+							}
+							//code = code.Remove(code.Length - 1);
+							code += "\n";
+						}
+						tbxCode.Text = code;
+						break;
+					}
+					case ConversionType.SettingsIn:
+					{
+						if(overwriteSettings)
+						{
+							listBoxItems.Clear();
+						}
+						string[] strCodes = tbxCode.Text.Replace("\r", "").Replace(" ", "").Replace("0x", "").Split(new char[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+						int oldNumSettings = listBoxItems.Count;
+						int newNumSettings = strCodes.Length;
+						DotMatrixSetting firstSetting = null;
+						for(int k = 0; k < strCodes.Length; k++)
+						{
+							string name = strCodes[k].Substring(0, strCodes[k].LastIndexOf(','));
+							strCodes[k] = strCodes[k].Substring(strCodes[k].LastIndexOf(',') + 1);
+							int newHeight;
+							int newWidth = System.Convert.ToInt32(strCodes[k].Substring(0, 2), 16);
+							int numSymbolsPerRow = (newWidth + 3) / 4;
+							strCodes[k] = strCodes[k].Substring(2);
+							strCodes[k] = strCodes[k].Replace(",", "");
+							newHeight = strCodes[k].Length / numSymbolsPerRow;
+							UInt64 mask = UInt64.MaxValue;
+							mask = mask >> (64 - newWidth);
+
+							string[] matrixLines = new string[newHeight];
+							UInt64[] splitMatrix = new UInt64[newHeight];
+							DotMatrixSetting newSetting = new DotMatrixSetting(name, newWidth, newHeight);
+							for(int i = newHeight; i != 0; i--)
+							{
+								matrixLines[i - 1] = strCodes[k].Substring(strCodes[k].Length - numSymbolsPerRow);
+								splitMatrix[i - 1] = System.Convert.ToUInt64(matrixLines[i - 1], 16);
+								strCodes[k] = strCodes[k].Remove(strCodes[k].Length - numSymbolsPerRow);
+							}
+							if(flipDimensions)
+							{
+								for(int i = 0; i < newHeight; i++)
+								{
+									for(int j = 0; j < newWidth; j++)
+									{
+										newSetting[i, j] = (splitMatrix[newHeight - i - 1] & (1UL << (j))) != 0;
+									}
 								}
 							}
-							code += num.ToString("X2");
-							//code += num.ToString("X2") + ",";
+							else
+							{
+								for(int i = 0; i < newHeight; i++)
+								{
+									for(int j = 0; j < newWidth; j++)
+									{
+										newSetting[i, j] = (splitMatrix[i] & (1UL << (newWidth - j - 1))) != 0;
+									}
+								}
+							}
+							if(!noImport)
+							{
+								listBoxItems.Add(newSetting);
+							}
+							if(trim)
+							{
+								newSetting.TrimMatrix();
+							}
+							if(k == 0)
+							{
+								firstSetting = newSetting;
+							}
 						}
-						//code = code.Remove(code.Length - 1);
-						code += "\n";
+						if(loadImmediately && firstSetting != null)
+						{
+							LoadDotMatrixFromSetting(firstSetting);
+							if(listBoxItems.Count > oldNumSettings)
+							{
+								(testControl.Content as ListBox).SelectedIndex = oldNumSettings;
+							}
+						}
+						break;
 					}
-					tbxCode.Text = code;
-					break;
+					case ConversionType.SettingsOut:
+					{
+						string code = "";
+						foreach(DotMatrixSetting setting in listBoxItems)
+						{
+							code += setting.Name;
+							code += ",";
+							code += setting.Width.ToString("X2");
+							for(int i = 0; i < setting.Height; i++)
+							{
+								UInt64 num = 0;
+								for(int j = 0; j < setting.Width; j++)
+								{
+									if(setting[i, j])
+									{
+										num |= (1UL << (byte)(setting.Width - 1 - j));
+									}
+								}
+								code += num.ToString($"X{(setting.Width + 3) / 4}");
+								//code += num.ToString("X2") + ",";
+							}
+							//code = code.Remove(code.Length - 1);
+							code += "\r\n";
+						}
+						tbxCode.Text = code;
+						break;
+					}
 				}
+			}
+			catch
+			{
+				MessageBox.Show("Invalid Conversion", "Invalid Conversion");
 			}
 		}
 
@@ -401,21 +508,66 @@ namespace DotMatrixTool
 			(int i, int j) = GetClickedEllipseIndex();
 			int di = i - lastClick.I;
 			int dj = j - lastClick.J;
-			if(lastClick.Valid && Keyboard.IsKeyDown(Key.LeftShift) && (i == lastClick.I || j == lastClick.J || di == dj || di == -dj))
+			if(lastClick.Valid && Keyboard.IsKeyDown(Key.LeftShift))
 			{
-				while(di != 0 || dj != 0)
+				if(Keyboard.IsKeyDown(Key.LeftCtrl))
 				{
-					buttons[i - di][j - dj].Fill = lastClick.Type == MainWindow.ClickType.Red ? Brushes.White : Brushes.Red;
-					if(di > 0)
-						di--;
-					if(dj > 0)
-						dj--;
-					if(di < 0)
-						di++;
-					if(dj < 0)
-						dj++;
+					while(di != 0)
+					{
+						dj = j - lastClick.J;
+						while(dj != 0)
+						{
+							buttons[i - di][j - dj].Fill = lastClick.Type == MainWindow.ClickType.Red ? Brushes.White : Brushes.Red;
+							if(dj > 0)
+								dj--;
+							if(dj < 0)
+								dj++;
+						}
+						if(di > 0)
+							di--;
+						if(di < 0)
+							di++;
+					}
+					dj = j - lastClick.J;
+					while(dj != 0)
+					{
+						buttons[i - di][j - dj].Fill = lastClick.Type == MainWindow.ClickType.Red ? Brushes.White : Brushes.Red;
+						if(dj > 0)
+							dj--;
+						if(dj < 0)
+							dj++;
+					}
+					di = i - lastClick.I;
+					while(di != 0)
+					{
+						buttons[i - di][j - dj].Fill = lastClick.Type == MainWindow.ClickType.Red ? Brushes.White : Brushes.Red;
+						if(di > 0)
+							di--;
+						if(di < 0)
+							di++;
+					}
+					buttons[i][j].Fill = lastClick.Type == ClickType.Red ? Brushes.White : Brushes.Red;
 				}
-				buttons[i][j].Fill = lastClick.Type == ClickType.Red ? Brushes.White : Brushes.Red;
+				else if(i == lastClick.I || j == lastClick.J || di == dj || di == -dj)
+				{
+					while(di != 0 || dj != 0)
+					{
+						buttons[i - di][j - dj].Fill = lastClick.Type == MainWindow.ClickType.Red ? Brushes.White : Brushes.Red;
+						if(di > 0)
+							di--;
+						if(dj > 0)
+							dj--;
+						if(di < 0)
+							di++;
+						if(dj < 0)
+							dj++;
+					}
+					buttons[i][j].Fill = lastClick.Type == ClickType.Red ? Brushes.White : Brushes.Red;
+				}
+				else
+				{
+					LED_MouseEnter(sender, null);
+				}
 			}
 			else
 			{
@@ -428,7 +580,7 @@ namespace DotMatrixTool
 					currentClick = ClickType.Red;
 				}
 				lastClick.Type = currentClick;
-				LED_MouseEnter(sender, null);
+				LED_MouseEnter(sender, null);	// LED on/off
 			}
 			lastClick.I = i;
 			lastClick.J = j;
@@ -457,7 +609,7 @@ namespace DotMatrixTool
 
 		public void SaveDotMatrixToSetting(DotMatrixSetting setting)
 		{
-			int selectedIndex = lbxSavedPatterns.SelectedIndex;
+			int selectedIndex = (testControl.Content as ListBox).SelectedIndex;
 			if(selectedIndex == -1)
 			{
 				return;
@@ -465,9 +617,8 @@ namespace DotMatrixTool
 			setting = new DotMatrixSetting(setting.Name, width, height);
 			setting.SetMatrix(dotMatrix);
 			listBoxItems[selectedIndex] = setting;
-			lbxSavedPatterns.SelectedIndex = selectedIndex;
+			(testControl.Content as ListBox).SelectedIndex = selectedIndex;
 		}
-
 		
 
 		private void Canvas_Resize(object sender, SizeChangedEventArgs e)
@@ -595,6 +746,7 @@ namespace DotMatrixTool
 			Canvas_Resize(null, null);
 		}
 
+
 		private void UpdateDimensions_Click(object sender, RoutedEventArgs e)
 		{
 			updateDimensions = (sender as MenuItem).IsChecked;
@@ -618,6 +770,16 @@ namespace DotMatrixTool
 		private void Trim_Click(object sender, RoutedEventArgs e)
 		{
 			trim = (sender as MenuItem).IsChecked;
+		}
+
+		private void OverwriteSettings_Click(object sender, RoutedEventArgs e)
+		{
+			overwriteSettings = (sender as MenuItem).IsChecked;
+		}
+
+		private void ExportDimensions_Click(object sender, RoutedEventArgs e)
+		{
+			exportDimensions = (sender as MenuItem).IsChecked;
 		}
 
 
@@ -681,6 +843,38 @@ namespace DotMatrixTool
 			}
 		}
 
+		public void FlipVertically()
+		{
+			bool temp = false;
+			for(int i = 0; i < height/2; i++)
+			{
+				for(int j = 0; j < width; j++)
+				{
+					temp = dotMatrix[i][j];
+					dotMatrix[i][j] = dotMatrix[height-i-1][j];
+					dotMatrix[height-i-1][j] = temp;
+				}
+			}
+		}
+
+		public void FlipHorizontally()
+		{
+			bool temp = false;
+			for(int j = 0; j < width/2; j++)
+			{
+				for(int i = 0; i < height; i++)
+				{
+					temp = dotMatrix[i][j];
+					dotMatrix[i][j] = dotMatrix[i][width-j-1];
+					dotMatrix[i][width-j-1] = temp;
+				}
+			}
+		}
+
+		//public void RotateClockwise()	// Maybe Add in the future
+		//{
+		//
+		//}
 
 		private void AssertCollectionSize<T>(List<List<T>> collection, int width, int height) where T : new()
 		{
@@ -709,38 +903,49 @@ namespace DotMatrixTool
 			}
 		}
 
-
-		private void TestText_DoubleClick(object sender, MouseButtonEventArgs e)
+		private void BackgroundColorChanged(object sender, RoutedPropertyChangedEventArgs<Color?> e)
 		{
-			(sender as TextBox).Focusable = true;
-			(sender as TextBox).IsReadOnly = false;
-			(sender as TextBox).CaretBrush = Brushes.Black;
-			(sender as TextBox).Cursor = Cursors.IBeam;
-			e.Handled = true;
-			(sender as TextBox).Focus();
-			(sender as TextBox).SelectAll();
-		}
-
-		private void TestTextBox_LostFocus(object sender, RoutedEventArgs e)
-		{
-			(sender as TextBox).Focusable = false;
-			(sender as TextBox).IsReadOnly = true;
-			(sender as TextBox).CaretBrush = Brushes.Transparent;
-			(sender as TextBox).Cursor = Cursors.Arrow;
-		}
-
-		private void TestTextBox_KeyDown(object sender, KeyEventArgs e)
-		{
-			if(e.Key != Key.Return)
+			if(e.NewValue != null && canvas != null)
 			{
-				return;
+				canvas.Background = new SolidColorBrush((Color)e.NewValue);
 			}
-			(sender as TextBox).Focusable = false;
-			(sender as TextBox).IsReadOnly = true;
-			(sender as TextBox).CaretBrush = Brushes.Transparent;
-			(sender as TextBox).Cursor = Cursors.Arrow;
 		}
-		
+
+		private void ResetBackgroundColor(object sender, RoutedEventArgs e)
+		{
+			canvas.Background = new SolidColorBrush(Colors.DodgerBlue);
+			backgroundPicker.SelectedColor = Colors.DodgerBlue;
+		}
+
+		private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+		{
+			ColDef2.MaxWidth = mainWindow.ActualWidth - ColDef0.MinWidth - 21.5;
+		}
+
+		//private void GridSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+		//{
+		//	// Maybe adjust window max dimensions
+		//}
+
+		private void ResizeCanvas_Click(object sender, RoutedEventArgs e)
+		{
+			double canvasNewWidth = 2*canvasSideMargin + width * cellSize;
+			double canvasNewHeight = 2*canvasSideMargin + height * cellSize;
+
+			double canvasWidthDelta = canvas.ActualWidth-canvasNewWidth;
+			double canvasHeightDelta = canvas.ActualHeight-canvasNewHeight;
+
+			Width -= canvasWidthDelta;
+			Height -= canvasHeightDelta;
+		}
+
+		private void WindowKeyDown(object sender, KeyEventArgs e)
+		{
+			if(e.Key == Key.System && e.OriginalSource is ListBoxItem)
+			{
+				e.Handled = true;
+			}
+		}
 	}
 
 	public class DotMatrixSetting
@@ -818,8 +1023,55 @@ namespace DotMatrixTool
 		{
 			int lastRow = Height;
 			int lastColumn = Width;
+			int firstRow = 0;
+			int firstColumn = 0;
 
 			bool endLoop = false;
+
+			for(int i = 0; i < Height; i++)	// Check if first rows are empty
+			{
+				for(int j = 0; j < Width; j++)
+				{
+					if(matrix[i, j])
+					{
+						endLoop = true;
+						break;
+					}
+				}
+				if(endLoop)
+				{
+					break;
+				}
+				firstRow++;
+			}
+			for(int i = 0; i<firstRow; i++)
+			{
+				ShiftUp();
+			}
+
+			endLoop = false;
+			for(int j = 0; j < Width; j++) // Check if first columns are empty
+			{
+				for(int i = 0; i < Height; i++)
+				{
+					if(matrix[i, j])
+					{
+						endLoop = true;
+						break;
+					}
+				}
+				if(endLoop)
+				{
+					break;
+				}
+				firstColumn++;
+			}
+			for(int j = 0; j < firstColumn; j++)
+			{
+				ShiftLeft();
+			}
+
+			endLoop = false;
 			for(int i = Height - 1; i >= 0 && !endLoop; i--)
 			{
 				for(int j = 0; j < Width; j++)
@@ -873,22 +1125,22 @@ namespace DotMatrixTool
 				matrix[0, j] = false;
 			}
 		}
-
+		*/
 		public void ShiftUp()
 		{
 			for(int i = 0; i < Height - 1; i++)
 			{
-				for(int j = 0; j < Height; j++)
+				for(int j = 0; j < Width; j++)
 				{
 					matrix[i, j] = matrix[i + 1, j];
 				}
 			}
-			for(int j = 0; j < Height; j++)
+			for(int j = 0; j < Width; j++)
 			{
 				matrix[Height - 1, j] = false;
 			}
 		}
-
+		/*
 		public void ShiftRight()
 		{
 			for(int j = Width - 1; j > 0; j--)
@@ -903,7 +1155,7 @@ namespace DotMatrixTool
 				matrix[i, 0] = false;
 			}
 		}
-
+		*/
 		public void ShiftLeft()
 		{
 			for(int j = 0; j < Width - 1; j++)
@@ -918,6 +1170,23 @@ namespace DotMatrixTool
 				matrix[i, Width - 1] = false;
 			}
 		}
-		*/
 	}
+
+	//public class SplitterWidthConverter : IValueConverter
+	//{
+	//	public static Window window { get; set; }
+	//
+	//	public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+	//	{
+	//		if(window != null)
+	//			return (window as MainWindow).ActualWidth - (double)value - 30;
+	//		else
+	//			return 0;
+	//	}
+	//
+	//	public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+	//	{
+	//		return 0;
+	//	}
+	//}
 }

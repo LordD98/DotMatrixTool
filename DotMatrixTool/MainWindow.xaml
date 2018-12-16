@@ -5,9 +5,17 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DotMatrixTool"
         xmlns:commands="clr-namespace:DotMatrixTool.Commands;assembly=DotMatrixTool"
-        
+        xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:System="clr-namespace:System;assembly=mscorlib"
-        Title="DotMatrixTool" Height="510.5" Width="780" MinWidth="430" MinHeight="140">
+        x:Name="mainWindow"
+		Title="DotMatrixTool" 
+		Height="510.5" Width="780" 
+		MinWidth="430" MinHeight="169" 
+		Icon="Icon.ico" SizeChanged="MainWindow_SizeChanged"
+		KeyDown="WindowKeyDown">
+	<!--<Window.Resources>
+		<local:SplitterWidthConverter x:Key="SplitterWidthConverter" />
+	</Window.Resources>-->
 	<DockPanel>
 		<Menu Height="20" Margin="0" VerticalAlignment="Top" DockPanel.Dock="Top" SnapsToDevicePixels="true">
 			<MenuItem Header="_Datei">
@@ -16,11 +24,37 @@
 				<MenuItem Command="commands:SettingCommands.Save"/>
 				<MenuItem Command="commands:SettingCommands.Delete"/>
 				<MenuItem Command="commands:SettingCommands.ClearAll"/>
+				<Separator/>
+				<MenuItem Command="commands:SettingCommands.Export"/>
+				<MenuItem Command="commands:SettingCommands.Import"/>
+				<MenuItem Command="commands:SettingCommands.ExportAs"/>
+				<MenuItem Command="commands:SettingCommands.ImportFrom"/>
 			</MenuItem>
-			<MenuItem Header="_Bearbeiten"/>
+			<!--<MenuItem Header="_Bearbeiten"/>-->
 			<MenuItem Header="_Ansicht">
-				<MenuItem Click="SmallLEDs_Clicked" Header="Small LEDs" IsCheckable="true"
-                  DataContext="local:Mainwindow" IsChecked="{Binding Path=IsChecked, ElementName=cbxUseSmallLeds}"/>
+				<MenuItem Header="Resize canvas" Width="300" Click="ResizeCanvas_Click"/>
+				<MenuItem Header="Small LEDs" 
+					Click="SmallLEDs_Clicked" 
+					IsCheckable="true"
+					IsChecked="false"/>
+				<MenuItem Width="300"
+						  >
+					<!--Click="BackgroundColor_Click"-->
+					<MenuItem.Header>
+						<WrapPanel>
+							<TextBlock Text="Background Color" Width="200"/>
+							<xctk:ColorPicker x:Name="backgroundPicker"
+								SelectedColorChanged="BackgroundColorChanged"
+								SelectedColor="DodgerBlue"
+								ColorMode="ColorCanvas" Margin="-2,1,5,0" Width="120"/>
+							<Button 
+								x:Name="btnResetBackgroundColor"
+								Width="60"
+								Content="Reset"
+								Click="ResetBackgroundColor"/>
+						</WrapPanel>
+					</MenuItem.Header>
+				</MenuItem>
 			</MenuItem>
 			<MenuItem Header="_Optionen">
 				<MenuItem Header="Konvertierung">
@@ -28,6 +62,8 @@
 					<MenuItem Click="MenuItemConvert_Click" Header="Matrix out" IsCheckable="true" IsChecked="false"/>
 					<MenuItem Click="MenuItemConvert_Click" Header="Codes in" IsCheckable="true" IsChecked="true"/>
 					<MenuItem Click="MenuItemConvert_Click" Header="Codes out" IsCheckable="true" IsChecked="false"/>
+					<MenuItem Click="MenuItemConvert_Click" Header="Settings in" IsCheckable="true" IsChecked="false"/>
+					<MenuItem Click="MenuItemConvert_Click" Header="Settings out" IsCheckable="true" IsChecked="false"/>
 					<!--<MenuItem Click="MenuItemConvert_Click" Header="Old Codes In" IsCheckable="true" IsChecked="false"/>-->
 				</MenuItem>
 				<Separator/>
@@ -36,23 +72,31 @@
 				<MenuItem Click="NoImport_Click" Header="No Import" IsCheckable="true" IsChecked="false" ToolTip="Load matrix without saving"/>
 				<MenuItem Click="FlipDimensions_Click" Header="Flip Dimensions" IsCheckable="true" IsChecked="false" ToolTip="Flip the matrix to load"/>
 				<MenuItem Click="Trim_Click" Header="Trim" IsCheckable="true" IsChecked="false" ToolTip="Remove empty rows and columns"/>
+				<MenuItem Click="OverwriteSettings_Click" Header="Overwrite Settings" IsCheckable="True" IsChecked="True" ToolTip="Delete existing settings on import"/>
+				<MenuItem Click="ExportDimensions_Click" Header="Export Dimensions" IsCheckable="True" IsChecked="True" ToolTip="Save Dimension of Settings"/>
 			</MenuItem>
 		</Menu>
-		<Grid Margin="0">
+		<Grid Name="mainGrid" Margin="0">
 			<Grid.RowDefinitions>
 				<RowDefinition Height="387*"/>
 				<RowDefinition Height="30"/>
 			</Grid.RowDefinitions>
 			<Grid.ColumnDefinitions>
-				<ColumnDefinition Width="536*"/>
-				<ColumnDefinition MinWidth="100" Width="179*"/>
+				<ColumnDefinition Width="536*" MinWidth="200" Name="ColDef0"/>
+				<ColumnDefinition Width="6.5"/>
+				<ColumnDefinition Name="ColDef2" MinWidth="100" Width="180"/>
+				<!-- DataContext="local:MainWindow"
+					MaxWidth="{Binding ElementName=canvas, Path=ActualWidth,
+								Converter={StaticResource SplitterWidthConverter}, 
+						UpdateSourceTrigger=PropertyChanged}"
+					/>-->
 			</Grid.ColumnDefinitions>
 			<Canvas 
 				x:Name="canvas" 
 				Grid.Row="0" 
 				Grid.Column="0" 
-				Margin="10,10,110,2.333"
-				Background="#FF3B94FF" 
+				Margin="10,10,0,2.333"
+				Background="DodgerBlue" 
 				SnapsToDevicePixels="true" 
 				Focusable="true" 
 				Loaded="DrawInit" 
@@ -60,78 +104,42 @@
 				SizeChanged="Canvas_Resize" 
 				PreviewKeyDown="Canvas_KeyDown" 
 				MouseLeftButtonDown="Canvas_Click"/>
-			<local:TestControl 
-				x:Name="testControl" 
-				Grid.Row="0" 
-				Grid.Column="0" 
-				Margin="0,10,5,2.333" HorizontalAlignment="Right" MinWidth="100"/>
-			<Grid Column="1" Margin="3.5,10,5,0" SnapsToDevicePixels="true">
+			<GridSplitter 
+				ResizeDirection="Columns" 
+				Grid.Column="1" 
+				HorizontalAlignment="Stretch" 
+				Height="419" 
+				Margin="0.333,10,0,0" 
+				VerticalAlignment="Top" 
+				SnapsToDevicePixels="True"
+				/>
+				<!--DragCompleted="GridSplitter_DragCompleted"-->
+			<Grid Column="2" Margin="0,10,5,0" SnapsToDevicePixels="true">
 				<Grid.RowDefinitions>
-					<RowDefinition Height="100*"/>
-					<RowDefinition Height="100*"/>
+					<RowDefinition Height="100*" MinHeight="20"/>
+					<RowDefinition Height="100*" MinHeight="25"/>
 					<RowDefinition Height="25"/>
 				</Grid.RowDefinitions>
-				<TextBox x:Name="tbxCode" Margin="0" TextWrapping="Wrap" IsManipulationEnabled="true" MinWidth="120"
-                 SnapsToDevicePixels="true" AcceptsReturn="true"/>
-				<ListBox KeyDown="ListBoxSavedPatterns_KeyDown"
-                 x:Name="lbxSavedPatterns" Margin="0,5,0,3" Grid.Row="1" HorizontalContentAlignment="Stretch"
-                 VerticalContentAlignment="Stretch" SnapsToDevicePixels="true">
-					<ItemsControl.ItemTemplate>
-						<DataTemplate>
-							<TextBox 
-								Padding="0,0,0,0" 
-								SnapsToDevicePixels="true" 
-								Cursor="Arrow" 
-								Focusable="false" 
-								Text="{Binding Name}"
-								HorizontalAlignment="Stretch"
-								VerticalAlignment="Top"
-								MaxLines="1"
-								MaxLength="20"
-								BorderBrush="Transparent"
-								Background="Transparent"
-								IsReadOnly="True"
-								
-								MouseDoubleClick="TestText_DoubleClick"
-								LostFocus="TestTextBox_LostFocus"
-								KeyDown="TestTextBox_KeyDown"
-								>
-								<FrameworkElement.Style>
-									<Style TargetType="{x:Type TextBox}">
-										<Setter Property="Control.Template">
-											<Setter.Value>
-												<ControlTemplate TargetType="{x:Type TextBox}">
-													<Border 
-														x:Name="Bd" 
-														BorderBrush="{TemplateBinding Control.BorderBrush}"
-														BorderThickness="{TemplateBinding Control.BorderThickness}"
-														Background="{TemplateBinding Control.Background}" 
-														Padding="{TemplateBinding Control.Padding}"
-														SnapsToDevicePixels="true">
-														<ScrollViewer 
-															x:Name="PART_ContentHost" 
-															Focusable="true" 
-															HorizontalScrollBarVisibility="Hidden"
-															VerticalScrollBarVisibility="Hidden"/>
-													</Border>
-												</ControlTemplate>
-											</Setter.Value>
-										</Setter>
-										<Setter Property="Control.Padding" Value="0,0,0,0"/>
-										<Setter Property="Control.BorderBrush" Value="Transparent"/>
-									</Style>
-								</FrameworkElement.Style>
-							</TextBox>
-						</DataTemplate>
-					</ItemsControl.ItemTemplate>
-				</ListBox>
+				<TextBox x:Name="tbxCode" 
+					Margin="0" 
+					TextWrapping="Wrap" 
+					IsManipulationEnabled="true"
+					SnapsToDevicePixels="true" 
+					AcceptsReturn="true"/>
+
+				<local:EditableListBox 
+				x:Name="testControl" 
+				Grid.Row="1" 
+				Grid.Column="0" 
+				Margin="0,5,0,0"
+				KeyDown="ListBoxSavedPatterns_KeyDown"/>
+
 				<UniformGrid Height="20" Margin="0" Grid.Row="2" Columns="3" SnapsToDevicePixels="true">
-					<Button x:Name="btnSave" Content="Save" Margin="0,0,5,-10" Command="commands:SettingCommands.Save"
-                  VerticalAlignment="Top" VerticalContentAlignment="Center" SnapsToDevicePixels="true"/>
+					<Button x:Name="btnSave" Content="Save" Margin="0,0,5,0" Command="commands:SettingCommands.Save" VerticalContentAlignment="Center" SnapsToDevicePixels="true" ToolTip="Save current Matrix to selected Setting"/>
 					<Button x:Name="btnLoad" Content="Load" Margin="0,0,3,0" Command="commands:SettingCommands.Load"
-                  SnapsToDevicePixels="true"/>
+						SnapsToDevicePixels="true" ToolTip="Load Matrix from selected Setting"/>
 					<Button Click="BtnClear_Click" x:Name="btnClear" Content="Clear" Margin="2,0,0,0"
-                  SnapsToDevicePixels="true"/>
+						SnapsToDevicePixels="true" ToolTip="Clear current matrix"/>
 				</UniformGrid>
 			</Grid>
 			<Grid Column="0" Margin="10,0,0,5" Row="1" SnapsToDevicePixels="true">
@@ -160,11 +168,17 @@
 				<Button Click="BtnInput_Click" x:Name="btnInput" Content="Load Code" Margin="4,0,3,0" Grid.Column="5"
                 Height="20" Padding="1" SnapsToDevicePixels="true"/>-->
 			</Grid>
-			<UniformGrid Grid.Column="1" Height="20" Margin="3.5,0,5,5" Grid.Row="1" Columns="3" SnapsToDevicePixels="true">
+			<UniformGrid 
+				Grid.Column="2" 
+				Grid.Row="1" 
+				Height="20" 
+				Margin="0,0,5,5" 
+				Columns="3" 
+				SnapsToDevicePixels="true">
 				<Button x:Name="btnNew" Content="New" Margin="0,0,5,0" Command="commands:SettingCommands.New"
-                SnapsToDevicePixels="true"/>
+                SnapsToDevicePixels="true" ToolTip="Create New Setting"/>
 				<Button x:Name="btnDelete" Content="Delete" Margin="0,0,3,0" Command="commands:SettingCommands.Delete"
-                SnapsToDevicePixels="true"/>
+                SnapsToDevicePixels="true" ToolTip="Delete Selected Setting"/>
 				<Button Click="Convert" x:Name="btnConvert" Content="Convert" Margin="2,0,0,0"
                 VerticalContentAlignment="Center" SnapsToDevicePixels="true"/>
 			</UniformGrid>
